@@ -6,14 +6,15 @@
         <v-app-bar-nav-icon @click="drawer = true">
           <v-icon>mdi-cog</v-icon>
         </v-app-bar-nav-icon>
-        <v-toolbar-title>フィッシャータイマー</v-toolbar-title>
+        <v-toolbar-title v-if="isFischer">フィッシャータイマー</v-toolbar-title>
+        <v-toolbar-title v-else>ダウンタイマー</v-toolbar-title>
         <v-spacer></v-spacer>
         <v-icon v-show="!isMute" @click="isMute = !isMute">mdi-volume-high</v-icon>
         <v-icon v-show="isMute" @click="isMute = !isMute">mdi-volume-off</v-icon>
       </v-app-bar>
 
       <!-- Sidebar -->
-      <v-navigation-drawer v-model="drawer" :clipped="clipped" fixed app>
+      <v-navigation-drawer v-model="drawer" app>
         <v-list nav>
           <v-list-item-group active-class="deep-purple--text text--accent-4">
             <v-list-item>
@@ -22,6 +23,9 @@
               </v-list-item-icon>
               <v-list-item-title class="sidebar-title">タイマー設定</v-list-item-title>
             </v-list-item>
+            
+            <v-switch v-model="isFischer" class="ma-2" label="フィッシャールール"></v-switch>
+
             <v-container fluid>
               <h3 class="text-center mt-5">先手</h3>
               <v-row align="center">
@@ -47,9 +51,13 @@
         スペースキーを押すと対局が開始されます。手番交代もスペースキーで行うことができます。
       </v-alert>
 
+      <v-alert v-if="winner" dense tile color="orange darken-1" class="alert text-center pa-4 mt-5 mx-5">
+        {{ winner }}の勝ちです
+      </v-alert>
+
       <!-- Timer -->
       <v-container>
-        <v-row class="pa-5" style="height: 400px;" justify="center" align-content="center">
+        <v-row class="pb-10 px-10" style="height: 400px;" justify="center" align-content="center">
           <v-row class="text-center">
             <v-col cols="12" sm="6">
               <h3 class="player-name">先手</h3>
@@ -76,12 +84,12 @@ export default {
   name: 'App',
 
   data: () => ({
-    clipped: false,
     drawer: false,
     sm1: null,
     ss1: null,
     sm2: null,
     ss2: null,
+    winner: null,
     player: false,
     elapsed1: 0,
     elapsed2: 0,
@@ -90,7 +98,8 @@ export default {
     timeText1: null,
     timeText2: null,
     isFirst: true,
-    isMute: false, //ミュートフラグ
+    isMute: false,   //ミュートフラグ
+    isFischer: true, //フィッシャーフラグ
     minutes: [
       0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11,
       12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
@@ -98,7 +107,13 @@ export default {
       36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
       48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59
     ],
-    seconds: [0,10,20,30,40,50],
+    seconds: [
+      0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11,
+      12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+      24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
+      36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+      48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59
+    ],
   }),
 
   computed: {
@@ -134,6 +149,8 @@ export default {
           this.elapsed1 += now - pre
           pre = now
           this.timeText1 = this.updateTime(this.limit1, this.elapsed1)
+          //時間切れ判定
+          this.checkTimeOver()
         }, 10)
       } else {
         if (this.intervalId2 !== null) { return }
@@ -143,6 +160,8 @@ export default {
           this.elapsed2 += now - pre
           pre = now
           this.timeText2 = this.updateTime(this.limit2, this.elapsed2)
+          //時間切れ判定
+          this.checkTimeOver()
         }, 10)
       }
     },
@@ -152,13 +171,13 @@ export default {
         if (this.limit1 === null) { return }
         clearInterval(this.intervalId1)
         this.intervalId1 = null
-        if (!this.isFirst) this.elapsed1 -= 5000
+        if (!this.isFirst && this.isFischer) { this.elapsed1 -= 5000 }
         this.timeText1 = this.updateTime(this.limit1, this.elapsed1)
       } else {
         if (this.limit2 === null) { return }
         clearInterval(this.intervalId2)
         this.intervalId2 = null
-        this.elapsed2 -= 5000
+        if (this.isFischer) { this.elapsed2 -= 5000 }
         this.timeText2 = this.updateTime(this.limit2, this.elapsed2)
       }
       //ゲームスタート時はプレイヤー変更しない
@@ -170,6 +189,24 @@ export default {
       this.player = !this.player
     },
 
+    checkTimeOver() {
+      if (this.limit1 <= this.elapsed1) {
+        this.reset()
+        this.winner = '後手'
+        if (!this.isMute) {
+          let audio = new Audio(require('./assets/sounds/pi5.mp3'))
+          audio.play()
+        }
+      } else if (this.limit2 <= this.elapsed2) {
+        this.reset()
+        this.winner = '先手'
+        if (!this.isMute) {
+          let audio = new Audio(require('./assets/sounds/pi5.mp3'))
+          audio.play()
+        }
+      }
+    },
+
     sound() {
       let audio = new Audio(require('./assets/sounds/push.mp3'))
       audio.play()
@@ -177,6 +214,7 @@ export default {
 
     init() {
       this.player = false
+      this.winner = null
       this.elapsed1 = 0
       this.elapsed2 = 0
       this.isFirst = true
@@ -203,6 +241,8 @@ export default {
     this.init()
 
     window.addEventListener("keypress", e => {
+      this.winner ? this.winner = null : ''
+
       if (e.keyCode === 32) {
         if (!this.isMute) this.sound()
         if (this.isFirst) {
